@@ -1,0 +1,14 @@
+C:\Users\flavi\MyCrudProject\bin\Debug\net9.0\MyCrudProject.exe
+C:\Users\flavi\MyCrudProject\bin\Debug\net9.0\MyCrudProject.deps.json
+C:\Users\flavi\MyCrudProject\bin\Debug\net9.0\MyCrudProject.runtimeconfig.json
+C:\Users\flavi\MyCrudProject\bin\Debug\net9.0\MyCrudProject.dll
+C:\Users\flavi\MyCrudProject\bin\Debug\net9.0\MyCrudProject.pdb
+C:\Users\flavi\MyCrudProject\obj\Debug\net9.0\MyCrudProject.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\flavi\MyCrudProject\obj\Debug\net9.0\MyCrudProject.AssemblyInfoInputs.cache
+C:\Users\flavi\MyCrudProject\obj\Debug\net9.0\MyCrudProject.AssemblyInfo.cs
+C:\Users\flavi\MyCrudProject\obj\Debug\net9.0\MyCrudProject.csproj.CoreCompileInputs.cache
+C:\Users\flavi\MyCrudProject\obj\Debug\net9.0\MyCrudProject.dll
+C:\Users\flavi\MyCrudProject\obj\Debug\net9.0\refint\MyCrudProject.dll
+C:\Users\flavi\MyCrudProject\obj\Debug\net9.0\MyCrudProject.pdb
+C:\Users\flavi\MyCrudProject\obj\Debug\net9.0\MyCrudProject.genruntimeconfig.cache
+C:\Users\flavi\MyCrudProject\obj\Debug\net9.0\ref\MyCrudProject.dll
