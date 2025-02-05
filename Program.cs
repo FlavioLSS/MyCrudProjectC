@@ -1,136 +1,181 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 
-// Um programa simples de CRUD (Criar, Listar, Editar, Deletar)
-class Program
+namespace MeuApp
 {
-    // Lista para armazenar os usuários
-    static List<Usuario> usuarios = new List<Usuario>();
-
-    // Contador para gerar IDs automaticamente
-    static int idCounter = 1;
-
-    static void Main(string[] args)
+    public record Usuario
     {
-        // Menu principal do programa
-        string opcao;
+        public int Id { get; init; }
+        public required string Nome { get; set; }
+        public required int Idade { get; set; }
+        public required string Email { get; set; }
+    }
 
-        do
+    public interface IUsuarioService
+    {
+        void AdicionarUsuario(string nome, int idade, string email);
+        void ListarUsuarios();
+        bool EditarUsuario(int id, string novoNome, int novaIdade, string novoEmail);
+        bool DeletarUsuario(int id);
+    }
+
+    public class UsuarioService : IUsuarioService
+    {
+        private readonly Dictionary<int, Usuario> _usuarios = new();
+        private int _idCounter = 1;
+
+        public void AdicionarUsuario(string nome, int idade, string email)
         {
-            Console.WriteLine("\n=== Menu ===");
-            Console.WriteLine("1 - Adicionar usuário");
-            Console.WriteLine("2 - Listar usuários");
-            Console.WriteLine("3 - Editar usuário");
-            Console.WriteLine("4 - Deletar usuário");
-            Console.WriteLine("5 - Sair");
-            Console.Write("Escolha uma opção: ");
-            opcao = Console.ReadLine();
-
-            // Chamando a função correta com base na opção escolhida
-            switch (opcao)
+            var usuario = new Usuario
             {
-                case "1": AdicionarUsuario(); break;
-                case "2": ListarUsuarios(); break;
-                case "3": EditarUsuario(); break;
-                case "4": DeletarUsuario(); break;
-                case "5":
-                    Console.WriteLine("\nUsuários cadastrados (final):");
-                    ListarUsuarios(); // Mostra os dados finais ao sair
-                    Console.WriteLine("Encerrando o programa...");
-                    break;
-                default:
-                    Console.WriteLine("Opção inválida. Tente novamente.");
-                    break;
+                Id = _idCounter++,
+                Nome = nome,
+                Idade = idade,
+                Email = email
+            };
+            _usuarios.Add(usuario.Id, usuario);
+            Console.WriteLine("Usuário adicionado com sucesso!");
+        }
+
+        public void ListarUsuarios()
+        {
+            if (_usuarios.Count == 0)
+            {
+                Console.WriteLine("Nenhum usuário cadastrado.");
+                return;
             }
-        } while (opcao != "5"); // O programa só para quando a opção "5" for escolhida
-    }
 
-    // Função para adicionar um novo usuário
-    static void AdicionarUsuario()
-    {
-        Console.Write("Digite o nome: ");
-        string nome = Console.ReadLine(); // Recebendo o nome
-
-        Console.Write("Digite a idade: ");
-        int idade = int.Parse(Console.ReadLine()); // Recebendo a idade
-
-        Console.Write("Digite o email: ");
-        string email = Console.ReadLine(); // Recebendo o email
-
-        // Adicionando um novo usuário na lista
-        usuarios.Add(new Usuario { ID = idCounter++, Nome = nome, Idade = idade, Email = email });
-
-        Console.WriteLine("Usuário adicionado com sucesso!");
-    }
-
-    // Função para listar todos os usuários cadastrados
-    static void ListarUsuarios()
-    {
-        if (usuarios.Count == 0)
-        {
-            Console.WriteLine("Nenhum usuário cadastrado.");
-            return;
+            foreach (var user in _usuarios.Values)
+            {
+                Console.WriteLine($"ID: {user.Id}, Nome: {user.Nome}, Idade: {user.Idade}, Email: {user.Email}");
+            }
         }
 
-        // Percorrendo a lista e exibindo os dados de cada usuário
-        foreach (var user in usuarios)
+        public bool EditarUsuario(int id, string novoNome, int novaIdade, string novoEmail)
         {
-            Console.WriteLine($"ID: {user.ID}, Nome: {user.Nome}, Idade: {user.Idade}, Email: {user.Email}");
-        }
-    }
-
-    // Função para editar os dados de um usuário
-    static void EditarUsuario()
-    {
-        Console.Write("Digite o ID do usuário que deseja editar: ");
-        int id = int.Parse(Console.ReadLine()); // Pegando o ID do usuário
-        var user = usuarios.Find(u => u.ID == id); // Buscando o usuário na lista
-
-        if (user != null)
-        {
-            // Atualizando os dados
-            Console.Write("Novo nome: ");
-            user.Nome = Console.ReadLine();
-
-            Console.Write("Nova idade: ");
-            user.Idade = int.Parse(Console.ReadLine());
-
-            Console.Write("Novo email: ");
-            user.Email = Console.ReadLine();
-
-            Console.WriteLine("Usuário atualizado com sucesso!");
-        }
-        else
-        {
+            if (_usuarios.TryGetValue(id, out var user))
+            {
+                user.Nome = novoNome;
+                user.Idade = novaIdade;
+                user.Email = novoEmail;
+                Console.WriteLine("Usuário atualizado com sucesso!");
+                return true;
+            }
             Console.WriteLine("Usuário não encontrado.");
+            return false;
         }
-    }
 
-    // Função para deletar um usuário
-    static void DeletarUsuario()
-    {
-        Console.Write("Digite o ID do usuário que deseja deletar: ");
-        int id = int.Parse(Console.ReadLine()); // Pegando o ID do usuário
-        var user = usuarios.Find(u => u.ID == id); // Buscando o usuário na lista
-
-        if (user != null)
+        public bool DeletarUsuario(int id)
         {
-            // Removendo o usuário da lista
-            usuarios.Remove(user);
-            Console.WriteLine("Usuário removido com sucesso!");
-        }
-        else
-        {
+            if (_usuarios.Remove(id))
+            {
+                Console.WriteLine("Usuário removido com sucesso!");
+                return true;
+            }
             Console.WriteLine("Usuário não encontrado.");
+            return false;
         }
     }
 
-    // Classe para representar os dados de um usuário
-    class Usuario
+    class Program
     {
-        public int ID { get; set; } // Identificador único do usuário
-        public string Nome { get; set; } // Nome do usuário
-        public int Idade { get; set; } // Idade do usuário
-        public string Email { get; set; } // Email do usuário
+        static void Main()
+        {
+            IUsuarioService usuarioService = new UsuarioService();
+            string opcao;
+
+            do
+            {
+                Console.WriteLine("\n=== Menu ===");
+                Console.WriteLine("1 - Adicionar usuário");
+                Console.WriteLine("2 - Listar usuários");
+                Console.WriteLine("3 - Editar usuário");
+                Console.WriteLine("4 - Deletar usuário");
+                Console.WriteLine("5 - Sair");
+                Console.Write("Escolha uma opção: ");
+                opcao = Console.ReadLine();
+
+                switch (opcao)
+                {
+                    case "1":
+                        AdicionarUsuario(usuarioService);
+                        break;
+                    case "2":
+                        usuarioService.ListarUsuarios();
+                        break;
+                    case "3":
+                        EditarUsuario(usuarioService);
+                        break;
+                    case "4":
+                        DeletarUsuario(usuarioService);
+                        break;
+                    case "5":
+                        Console.WriteLine("\nUsuários cadastrados (final):");
+                        usuarioService.ListarUsuarios();
+                        Console.WriteLine("Encerrando o programa...");
+                        break;
+                    default:
+                        Console.WriteLine("Opção inválida. Tente novamente.");
+                        break;
+                }
+            } while (opcao != "5");
+        }
+
+        static void AdicionarUsuario(IUsuarioService usuarioService)
+        {
+            Console.Write("Digite o nome: ");
+            string nome = Console.ReadLine();
+
+            Console.Write("Digite a idade: ");
+            if (int.TryParse(Console.ReadLine(), out int idade))
+            {
+                Console.Write("Digite o email: ");
+                string email = Console.ReadLine();
+                usuarioService.AdicionarUsuario(nome, idade, email);
+            }
+            else
+            {
+                Console.WriteLine("Idade inválida. Usuário não adicionado.");
+            }
+        }
+
+        static void EditarUsuario(IUsuarioService usuarioService)
+        {
+            Console.Write("Digite o ID do usuário que deseja editar: ");
+            if (int.TryParse(Console.ReadLine(), out int id))
+            {
+                Console.Write("Novo nome: ");
+                string novoNome = Console.ReadLine();
+
+                Console.Write("Nova idade: ");
+                if (int.TryParse(Console.ReadLine(), out int novaIdade))
+                {
+                    Console.Write("Novo email: ");
+                    string novoEmail = Console.ReadLine();
+                    usuarioService.EditarUsuario(id, novoNome, novaIdade, novoEmail);
+                }
+                else
+                {
+                    Console.WriteLine("Idade inválida. Edição cancelada.");
+                }
+            }
+            else
+            {
+                Console.WriteLine("ID inválido. Edição cancelada.");
+            }
+        }
+
+        static void DeletarUsuario(IUsuarioService usuarioService)
+        {
+            Console.Write("Digite o ID do usuário que deseja deletar: ");
+            if (int.TryParse(Console.ReadLine(), out int id))
+            {
+                usuarioService.DeletarUsuario(id);
+            }
+            else
+            {
+                Console.WriteLine("ID inválido. Exclusão cancelada.");
+            }
+        }
     }
 }
