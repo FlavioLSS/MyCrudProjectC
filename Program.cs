@@ -1,154 +1,177 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
+using System.Linq;
+using Microsoft.EntityFrameworkCore;
+using System.Threading.Tasks;
 
 namespace MeuApp
 {
-    /// <summary>
-    /// Representa os dados de um usuário no sistema
-    /// </summary>
     public sealed record Usuario
     {
-        /// <summary>
-        /// Identificador único do usuário
-        /// </summary>
         public int Id { get; init; }
 
-        /// <summary>
-        /// Nome completo do usuário
-        /// </summary>
         [Required(ErrorMessage = "O nome é obrigatório")]
         [StringLength(100, MinimumLength = 3, ErrorMessage = "O nome deve ter entre 3 e 100 caracteres")]
         public required string Nome { get; set; }
 
-        /// <summary>
-        /// Idade do usuário
-        /// </summary>
         [Range(0, 150, ErrorMessage = "A idade deve estar entre 0 e 150 anos")]
         public required int Idade { get; set; }
 
-        /// <summary>
-        /// Endereço de email do usuário
-        /// </summary>
         [Required(ErrorMessage = "O email é obrigatório")]
         [EmailAddress(ErrorMessage = "O email fornecido não é válido")]
         [StringLength(255, ErrorMessage = "O email não pode ter mais de 255 caracteres")]
         public required string Email { get; set; }
+
+        public DateTime DataCadastro { get; set; }
+        public DateTime? UltimaAtualizacao { get; set; }
     }
 
-    /// <summary>
-    /// Interface que define as operações disponíveis para gerenciamento de usuários
-    /// </summary>
+    public class AppDbContext : DbContext
+    {
+        public DbSet<Usuario> Usuarios { get; set; }
+
+        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+        {
+            optionsBuilder.UseSqlServer("Server=localhost;Database=MeuAppDB;Trusted_Connection=True;TrustServerCertificate=True;");
+        }
+
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<Usuario>()
+                .HasIndex(u => u.Email)
+                .IsUnique();
+
+            modelBuilder.Entity<Usuario>()
+                .Property(u => u.DataCadastro)
+                .HasDefaultValueSql("GETDATE()");
+        }
+    }
+
     public interface IUsuarioService
     {
-        /// <summary>
-        /// Adiciona um novo usuário ao sistema
-        /// </summary>
-        /// <param name="nome">Nome do usuário</param>
-        /// <param name="idade">Idade do usuário</param>
-        /// <param name="email">Email do usuário</param>
-        /// <exception cref="ArgumentException">Lançada quando os dados do usuário são inválidos</exception>
-        void AdicionarUsuario(string nome, int idade, string email);
-
-        /// <summary>
-        /// Lista todos os usuários cadastrados no sistema
-        /// </summary>
-        void ListarUsuarios();
-
-        /// <summary>
-        /// Edita os dados de um usuário existente
-        /// </summary>
-        /// <param name="id">ID do usuário a ser editado</param>
-        /// <param name="novoNome">Novo nome do usuário</param>
-        /// <param name="novaIdade">Nova idade do usuário</param>
-        /// <param name="novoEmail">Novo email do usuário</param>
-        /// <returns>true se o usuário foi encontrado e atualizado, false caso contrário</returns>
-        /// <exception cref="ArgumentException">Lançada quando os novos dados são inválidos</exception>
-        bool EditarUsuario(int id, string novoNome, int novaIdade, string novoEmail);
-
-        /// <summary>
-        /// Remove um usuário do sistema
-        /// </summary>
-        /// <param name="id">ID do usuário a ser removido</param>
-        /// <returns>true se o usuário foi encontrado e removido, false caso contrário</returns>
-        bool DeletarUsuario(int id);
+        Task<Usuario> AdicionarUsuarioAsync(string nome, int idade, string email);
+        Task<IEnumerable<Usuario>> ListarUsuariosAsync();
+        Task<Usuario> ObterUsuarioPorIdAsync(int id);
+        Task<IEnumerable<Usuario>> BuscarUsuariosPorNomeAsync(string nome);
+        Task<bool> EditarUsuarioAsync(int id, string novoNome, int novaIdade, string novoEmail);
+        Task<bool> DeletarUsuarioAsync(int id);
+        Task<bool> EmailJaExisteAsync(string email);
     }
 
-    /// <summary>
-    /// Implementação do serviço de gerenciamento de usuários
-    /// </summary>
-    public sealed class UsuarioService : IUsuarioService
+    public sealed class UsuarioService : IUsuarioService, IDisposable
     {
-        private readonly Dictionary<int, Usuario> _usuarios = new();
-        private int _idCounter = 1;
+        private readonly AppDbContext _context;
 
-        /// <inheritdoc/>
-        public void AdicionarUsuario(string nome, int idade, string email)
+        public UsuarioService()
+        {
+            _context = new AppDbContext();
+        }
+
+        public async Task<Usuario> AdicionarUsuarioAsync(string nome, int idade, string email)
         {
             ValidarDadosUsuario(nome, idade, email);
 
+            if (await EmailJaExisteAsync(email))
+                throw new ArgumentException("Este email já está cadastrado.", nameof(email));
+
             var usuario = new Usuario
             {
-                Id = _idCounter++,
                 Nome = nome,
                 Idade = idade,
-                Email = email
+                Email = email,
+                DataCadastro = DateTime.Now
             };
 
-            _usuarios.Add(usuario.Id, usuario);
+            await _context.Usuarios.AddAsync(usuario);
+            await _context.SaveChangesAsync();
+
             Console.WriteLine("Usuário adicionado com sucesso!");
+            return usuario;
         }
 
-        /// <inheritdoc/>
-        public void ListarUsuarios()
+        public async Task<IEnumerable<Usuario>> ListarUsuariosAsync()
         {
-            if (_usuarios.Count == 0)
+            var usuarios = await _context.Usuarios
+                .OrderBy(u => u.Nome)
+                .ToListAsync();
+
+            if (!usuarios.Any())
             {
                 Console.WriteLine("Nenhum usuário cadastrado.");
-                return;
+                return Enumerable.Empty<Usuario>();
             }
 
-            foreach (var usuario in _usuarios.Values)
+            foreach (var usuario in usuarios)
             {
-                Console.WriteLine($"ID: {usuario.Id}, Nome: {usuario.Nome}, Idade: {usuario.Idade}, Email: {usuario.Email}");
+                Console.WriteLine($"ID: {usuario.Id}, Nome: {usuario.Nome}, Idade: {usuario.Idade}, " +
+                    $"Email: {usuario.Email}, Cadastro: {usuario.DataCadastro:dd/MM/yyyy}");
             }
+
+            return usuarios;
         }
 
-        /// <inheritdoc/>
-        public bool EditarUsuario(int id, string novoNome, int novaIdade, string novoEmail)
+        public async Task<Usuario> ObterUsuarioPorIdAsync(int id)
+        {
+            var usuario = await _context.Usuarios.FindAsync(id);
+            if (usuario == null)
+                throw new KeyNotFoundException($"Usuário com ID {id} não encontrado.");
+
+            return usuario;
+        }
+
+        public async Task<IEnumerable<Usuario>> BuscarUsuariosPorNomeAsync(string nome)
+        {
+            return await _context.Usuarios
+                .Where(u => u.Nome.Contains(nome))
+                .OrderBy(u => u.Nome)
+                .ToListAsync();
+        }
+
+        public async Task<bool> EditarUsuarioAsync(int id, string novoNome, int novaIdade, string novoEmail)
         {
             ValidarDadosUsuario(novoNome, novaIdade, novoEmail);
 
-            if (_usuarios.TryGetValue(id, out var usuario))
+            var usuario = await _context.Usuarios.FindAsync(id);
+            if (usuario == null)
             {
-                usuario.Nome = novoNome;
-                usuario.Idade = novaIdade;
-                usuario.Email = novoEmail;
-                Console.WriteLine("Usuário atualizado com sucesso!");
-                return true;
+                Console.WriteLine("Usuário não encontrado.");
+                return false;
             }
 
-            Console.WriteLine("Usuário não encontrado.");
-            return false;
+            if (usuario.Email != novoEmail && await EmailJaExisteAsync(novoEmail))
+                throw new ArgumentException("Este email já está cadastrado por outro usuário.", nameof(novoEmail));
+
+            usuario.Nome = novoNome;
+            usuario.Idade = novaIdade;
+            usuario.Email = novoEmail;
+            usuario.UltimaAtualizacao = DateTime.Now;
+
+            await _context.SaveChangesAsync();
+            Console.WriteLine("Usuário atualizado com sucesso!");
+            return true;
         }
 
-        /// <inheritdoc/>
-        public bool DeletarUsuario(int id)
+        public async Task<bool> DeletarUsuarioAsync(int id)
         {
-            if (_usuarios.Remove(id))
+            var usuario = await _context.Usuarios.FindAsync(id);
+            if (usuario == null)
             {
-                Console.WriteLine("Usuário removido com sucesso!");
-                return true;
+                Console.WriteLine("Usuário não encontrado.");
+                return false;
             }
 
-            Console.WriteLine("Usuário não encontrado.");
-            return false;
+            _context.Usuarios.Remove(usuario);
+            await _context.SaveChangesAsync();
+            Console.WriteLine("Usuário removido com sucesso!");
+            return true;
         }
 
-        /// <summary>
-        /// Valida os dados do usuário antes de adicionar ou atualizar
-        /// </summary>
-        /// <exception cref="ArgumentException">Lançada quando os dados são inválidos</exception>
+        public async Task<bool> EmailJaExisteAsync(string email)
+        {
+            return await _context.Usuarios.AnyAsync(u => u.Email == email);
+        }
+
         private static void ValidarDadosUsuario(string nome, int idade, string email)
         {
             if (string.IsNullOrWhiteSpace(nome))
@@ -167,19 +190,18 @@ namespace MeuApp
                 @"^[^@\s]+@[^@\s]+\.[^@\s]+$"))
                 throw new ArgumentException("O email fornecido não é válido.", nameof(email));
         }
+
+        public void Dispose()
+        {
+            _context.Dispose();
+        }
     }
 
-    /// <summary>
-    /// Classe principal do programa que gerencia o menu e interação com usuário
-    /// </summary>
     public sealed class Program
     {
         private static readonly IUsuarioService _usuarioService = new UsuarioService();
 
-        /// <summary>
-        /// Ponto de entrada principal do programa
-        /// </summary>
-        public static void Main()
+        public static async Task Main()
         {
             string opcao;
 
@@ -190,7 +212,7 @@ namespace MeuApp
 
                 try
                 {
-                    ProcessarOpcao(opcao);
+                    await ProcessarOpcaoAsync(opcao);
                 }
                 catch (ArgumentException ex)
                 {
@@ -200,45 +222,46 @@ namespace MeuApp
                 {
                     Console.WriteLine($"Erro inesperado: {ex.Message}");
                 }
-            } while (opcao != "5");
+            } while (opcao != "7");
         }
 
-        /// <summary>
-        /// Exibe o menu principal do programa
-        /// </summary>
         private static void ExibirMenu()
         {
             Console.WriteLine("\n=== Menu ===");
             Console.WriteLine("1 - Adicionar usuário");
             Console.WriteLine("2 - Listar usuários");
-            Console.WriteLine("3 - Editar usuário");
-            Console.WriteLine("4 - Deletar usuário");
-            Console.WriteLine("5 - Sair");
+            Console.WriteLine("3 - Buscar usuário por ID");
+            Console.WriteLine("4 - Buscar usuários por nome");
+            Console.WriteLine("5 - Editar usuário");
+            Console.WriteLine("6 - Deletar usuário");
+            Console.WriteLine("7 - Sair");
             Console.Write("Escolha uma opção: ");
         }
 
-        /// <summary>
-        /// Processa a opção escolhida pelo usuário
-        /// </summary>
-        /// <param name="opcao">Opção selecionada no menu</param>
-        private static void ProcessarOpcao(string opcao)
+        private static async Task ProcessarOpcaoAsync(string opcao)
         {
             switch (opcao)
             {
                 case "1":
-                    AdicionarUsuario();
+                    await AdicionarUsuarioAsync();
                     break;
                 case "2":
-                    _usuarioService.ListarUsuarios();
+                    await _usuarioService.ListarUsuariosAsync();
                     break;
                 case "3":
-                    EditarUsuario();
+                    await BuscarUsuarioPorIdAsync();
                     break;
                 case "4":
-                    DeletarUsuario();
+                    await BuscarUsuariosPorNomeAsync();
                     break;
                 case "5":
-                    FinalizarPrograma();
+                    await EditarUsuarioAsync();
+                    break;
+                case "6":
+                    await DeletarUsuarioAsync();
+                    break;
+                case "7":
+                    await FinalizarProgramaAsync();
                     break;
                 default:
                     Console.WriteLine("Opção inválida. Tente novamente.");
@@ -246,10 +269,7 @@ namespace MeuApp
             }
         }
 
-        /// <summary>
-        /// Processa a adição de um novo usuário
-        /// </summary>
-        private static void AdicionarUsuario()
+        private static async Task AdicionarUsuarioAsync()
         {
             Console.Write("Digite o nome: ");
             string nome = Console.ReadLine();
@@ -263,13 +283,49 @@ namespace MeuApp
             Console.Write("Digite o email: ");
             string email = Console.ReadLine();
 
-            _usuarioService.AdicionarUsuario(nome, idade, email);
+            await _usuarioService.AdicionarUsuarioAsync(nome, idade, email);
         }
 
-        /// <summary>
-        /// Processa a edição de um usuário existente
-        /// </summary>
-        private static void EditarUsuario()
+        private static async Task BuscarUsuarioPorIdAsync()
+        {
+            Console.Write("Digite o ID do usuário: ");
+            if (!int.TryParse(Console.ReadLine(), out int id))
+            {
+                throw new ArgumentException("ID inválido.");
+            }
+
+            try
+            {
+                var usuario = await _usuarioService.ObterUsuarioPorIdAsync(id);
+                Console.WriteLine($"ID: {usuario.Id}, Nome: {usuario.Nome}, Idade: {usuario.Idade}, " +
+                    $"Email: {usuario.Email}, Cadastro: {usuario.DataCadastro:dd/MM/yyyy}");
+            }
+            catch (KeyNotFoundException ex)
+            {
+                Console.WriteLine(ex.Message);
+            }
+        }
+
+        private static async Task BuscarUsuariosPorNomeAsync()
+        {
+            Console.Write("Digite o nome para busca: ");
+            string nome = Console.ReadLine();
+
+            var usuarios = await _usuarioService.BuscarUsuariosPorNomeAsync(nome);
+            if (!usuarios.Any())
+            {
+                Console.WriteLine("Nenhum usuário encontrado com esse nome.");
+                return;
+            }
+
+            foreach (var usuario in usuarios)
+            {
+                Console.WriteLine($"ID: {usuario.Id}, Nome: {usuario.Nome}, Idade: {usuario.Idade}, " +
+                    $"Email: {usuario.Email}, Cadastro: {usuario.DataCadastro:dd/MM/yyyy}");
+            }
+        }
+
+        private static async Task EditarUsuarioAsync()
         {
             Console.Write("Digite o ID do usuário que deseja editar: ");
             if (!int.TryParse(Console.ReadLine(), out int id))
@@ -289,13 +345,10 @@ namespace MeuApp
             Console.Write("Novo email: ");
             string novoEmail = Console.ReadLine();
 
-            _usuarioService.EditarUsuario(id, novoNome, novaIdade, novoEmail);
+            await _usuarioService.EditarUsuarioAsync(id, novoNome, novaIdade, novoEmail);
         }
 
-        /// <summary>
-        /// Processa a remoção de um usuário
-        /// </summary>
-        private static void DeletarUsuario()
+        private static async Task DeletarUsuarioAsync()
         {
             Console.Write("Digite o ID do usuário que deseja deletar: ");
             if (!int.TryParse(Console.ReadLine(), out int id))
@@ -303,17 +356,19 @@ namespace MeuApp
                 throw new ArgumentException("ID inválido.");
             }
 
-            _usuarioService.DeletarUsuario(id);
+            await _usuarioService.DeletarUsuarioAsync(id);
         }
 
-        /// <summary>
-        /// Finaliza o programa exibindo a lista final de usuários
-        /// </summary>
-        private static void FinalizarPrograma()
+        private static async Task FinalizarProgramaAsync()
         {
             Console.WriteLine("\nUsuários cadastrados (final):");
-            _usuarioService.ListarUsuarios();
+            await _usuarioService.ListarUsuariosAsync();
             Console.WriteLine("Encerrando o programa...");
+            
+            if (_usuarioService is IDisposable disposable)
+            {
+                disposable.Dispose();
+            }
         }
     }
 }
